@@ -1,0 +1,1668 @@
+/* ==========================================================================
+   StockPulse — frontend stylesheet
+
+   Written by hand for this project. No framework, no CDN, no webfont
+   download: the page must render correctly with no network connection,
+   because the demonstration and the video both have to work offline.
+
+   The visual language is taken from the design mockup: a white-to-blush
+   gradient wash, crisp frosted surfaces, a deep rose accent, pill-shaped
+   controls and generous corner radii. The palette values below are the
+   mockup's own, so the two look like the same product.
+
+   Deliberately light-mode only. The mockup also ships a dark theme; it is not
+   reproduced here because it doubles the surface area of the stylesheet for
+   no marking benefit. If it is wanted later it belongs in this file as a
+   `body.dark` block, not in the markup.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design tokens
+   -------------------------------------------------------------------------- */
+:root {
+  /* Brand */
+  --brand: #E11D48;
+  --brand-hover: #BE123C;
+  --brand-soft: rgba(225, 29, 72, 0.07);
+  --brand-ring: rgba(225, 29, 72, 0.16);
+
+  /* Surfaces */
+  --canvas: linear-gradient(145deg, #FFFFFF 0%, #FFF9FA 50%, #FFF1F4 100%);
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-bg-strong: rgba(255, 255, 255, 0.96);
+  --glass-bg-subtle: rgba(248, 250, 252, 0.72);
+  --glass-border: rgba(226, 232, 240, 0.85);
+  --glass-shadow:
+    0 8px 24px -10px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.03);
+  --glass-shadow-hover:
+    0 14px 30px -10px rgba(15, 23, 42, 0.08),
+    0 2px 6px rgba(225, 29, 72, 0.04);
+
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+
+  /* Status */
+  --danger: #E11D48;
+  --danger-bg: rgba(225, 29, 72, 0.08);
+  --warning: #D97706;
+  --warning-bg: rgba(217, 119, 6, 0.09);
+  /* Success is part of the palette but no rule currently consumes it. The
+     inventory chip used to be green when Java reported no reorder risk; that
+     read as "this item is healthy", so the chip is neutral now. Kept as a
+     token rather than deleted, in case a later screen has something it can
+     genuinely affirm. */
+  --success: #059669;
+  --success-bg: rgba(5, 150, 105, 0.09);
+
+  /* Controls */
+  --input-bg: #FFFFFF;
+  --input-border: #CBD5E1;
+  --row-hover: rgba(241, 245, 249, 0.75);
+  --divider: rgba(226, 232, 240, 0.85);
+
+  /* Shape */
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 11px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  /* Motion */
+  --transition: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* The mockup loads Plus Jakarta Sans and Inter from Google. That is a
+     network request that always fails offline, so the system stack stands in.
+     On Windows this resolves to Segoe UI, on macOS to SF - both close enough
+     in feel that the design holds. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--canvas);
+  background-attachment: fixed;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* A disabled control has to look disabled: until the page is connected every
+   control is inert, and a button that looks live but does nothing is a lie. */
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+/* Figures line up in a column only if the digits do. */
+.kpi-value,
+.inv-table td,
+.util-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The ambient wash sits behind everything and does not react to the pointer. */
+.ambient-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 228, 230, 0.45) 0%, transparent 45%),
+    radial-gradient(circle at 88% 88%, rgba(254, 205, 211, 0.32) 0%, transparent 48%);
+}
+
+/* --------------------------------------------------------------------------
+   3. Frosted surface
+   -------------------------------------------------------------------------- */
+.glass {
+  position: relative;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+  backdrop-filter: blur(20px) saturate(135%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* --------------------------------------------------------------------------
+   4. Shell layout
+   -------------------------------------------------------------------------- */
+.app-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100vh;
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 18px 22px;
+  gap: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   5. Sidebar
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 244px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 18px;
+  height: calc(100vh - 36px);
+  z-index: 45;
+}
+
+.logo-panel {
+  border-radius: var(--radius-xl);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  transition: box-shadow var(--transition);
+}
+
+.logo-mark-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #0F172A;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-text {
+  min-width: 0;
+}
+
+.logo-wordmark {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.logo-wordmark-bold {
+  font-weight: 800;
+}
+
+.logo-wordmark-light {
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.logo-pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin: 0 2px;
+}
+
+.logo-tagline {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.sidebar-nav-card {
+  flex: 1;
+  border-radius: var(--radius-xl);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.add-item-pill-btn {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--brand);
+  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-shadow: 0 4px 12px -2px rgba(225, 29, 72, 0.28);
+  transition: background-color var(--transition), transform var(--transition),
+    opacity var(--transition);
+  flex-shrink: 0;
+}
+
+.add-item-pill-btn:hover:not(:disabled) {
+  background: var(--brand-hover);
+}
+
+/* Inert until the add-item form is wired up, so it must not read as an
+   active button. Dimming the brand pink alone was not enough: at 0.55 opacity
+   it still read as the sidebar's main call to action. The disabled state
+   drops the fill entirely and keeps only a hairline border, so the shape
+   stays in place and the page does not jump when it is enabled later. */
+.add-item-pill-btn:disabled {
+  background: var(--brand-soft);
+  color: var(--brand);
+  box-shadow: none;
+  border: 1px solid rgba(225, 29, 72, 0.22);
+  cursor: not-allowed;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9.5px 11px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+  text-align: left;
+  width: 100%;
+}
+
+.nav-btn:hover {
+  background: var(--row-hover);
+  color: var(--text-primary);
+}
+
+.nav-btn.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.nav-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.nav-btn.active svg {
+  opacity: 1;
+}
+
+.nav-divider {
+  height: 1px;
+  background: var(--divider);
+  margin: 8px 4px;
+}
+
+/* Role block replaces the mockup's signed-in profile card. */
+.role-block {
+  margin-top: auto;
+  border-radius: 12px;
+  padding: 11px 12px 12px;
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--divider);
+}
+
+.role-block-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+.role-switch {
+  display: flex;
+  gap: 4px;
+  background: #FFFFFF;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.role-option {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.role-option.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.role-option:disabled {
+  opacity: 1; /* still legible; it is inert, not unavailable */
+}
+
+.role-note {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   6. Main area and top bar
+   -------------------------------------------------------------------------- */
+.main-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 64px;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mobile-menu-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.page-heading h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.page-heading p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* On a narrow screen the heading text is the thing that should give way,
+   not the page width. */
+.page-heading {
+  min-width: 0;
+}
+
+.page-heading h1,
+.page-heading p {
+  overflow-wrap: anywhere;
+}
+
+.utility-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.util-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 600;
+  max-width: 100%;
+}
+
+.util-label {
+  color: var(--text-muted);
+}
+
+.util-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* A statement from the page about its own state, not a figure. It appears
+   only when startup failed, and it sits above the KPI strip so it cannot be
+   mistaken for a value inside one of the cards. */
+.status-strip {
+  margin-top: 14px;
+  padding: 11px 15px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--divider);
+  background: var(--glass-bg-subtle);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.status-strip.is-danger {
+  border-color: rgba(225, 29, 72, 0.28);
+  background: var(--danger-bg);
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   7. KPI strip
+   Six cards. Three columns gives two balanced rows of three; five columns
+   would leave a single orphan on the second row.
+   -------------------------------------------------------------------------- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  border-radius: var(--radius-xl);
+  padding: 17px 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  transition: box-shadow var(--transition), transform var(--transition);
+  min-width: 0;
+}
+
+.kpi-card:hover {
+  transform: translateY(-1.5px);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.kpi-body {
+  min-width: 0;
+}
+
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.35;
+}
+
+.kpi-value {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin-top: 6px;
+  line-height: 1.1;
+}
+
+.kpi-value.is-danger {
+  color: var(--danger);
+}
+
+.kpi-value.is-warning {
+  color: var(--warning);
+}
+
+.kpi-sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.35;
+  /* Two lines are reserved whether the text needs one or two, so the figures
+     below them all sit on the same baseline. */
+  min-height: 2.7em;
+}
+
+.kpi-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.kpi-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.kpi-icon.is-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.kpi-icon.is-warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+/* --------------------------------------------------------------------------
+   8. Views
+   Only the active view is shown. Switching is a later step; the markup
+   carries `active` on exactly one section so the layout is correct now.
+   -------------------------------------------------------------------------- */
+.view-section {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.view-section.active {
+  display: flex;
+}
+
+.dashboard-bento-top {
+  display: grid;
+  grid-template-columns: 1.38fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.dash-card {
+  border-radius: var(--radius-xl);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card-icon-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.card-icon-pill svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A statement of fact about an empty region, not a call to action. */
+.empty-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: 14px;
+  border: 1px dashed var(--divider);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-subtle);
+}
+
+/* One warning from flags[]. The rows arrive in the order Java ranked them,
+   and nothing here re-orders or emphasises a row beyond its own type chip. */
+.queue-row {
+  padding: 11px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--divider);
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color var(--transition);
+}
+
+.queue-row:hover {
+  border-color: rgba(225, 29, 72, 0.22);
+}
+
+.queue-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.queue-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The type chip. Colour is chosen by the flag's type, never by its urgency,
+   so the page cannot imply a ranking the API did not send. */
+.queue-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--divider);
+  color: var(--text-secondary);
+}
+
+.queue-chip.is-danger {
+  background: var(--danger-bg);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.queue-chip.is-warn {
+  background: var(--warning-bg);
+  border-color: transparent;
+  color: var(--warning);
+}
+
+/* Java's own sentence. It is the whole explanation, so it is given room to
+   wrap rather than being cut to one line. */
+.queue-reason {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.queue-meta {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   9. Advisor briefing
+   The two sources are visually separated on purpose: AI text and the Java
+   rule summary must never be mistaken for each other.
+   -------------------------------------------------------------------------- */
+.briefing-body {
+  padding: 2px 0;
+}
+
+.briefing-text {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* Consecutive paragraphs from the model need the gap, or the text reads as
+   one block. */
+.briefing-text p + p {
+  margin-top: 9px;
+}
+
+/* No AI text was produced. The block is still readable, but it is visibly not
+   a briefing: the lead sentence and the remedy are marked apart from the
+   server's explanation. */
+.briefing-text.is-unavailable {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--divider);
+  background: var(--glass-bg-subtle);
+}
+
+.briefing-lead {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.briefing-remedy {
+  display: block;
+  margin-top: 7px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* The chip on the right of the Advisor Briefing header. AI text and the Java
+   rule summary must never share a colour. */
+.source-chip.is-ai {
+  background: var(--brand-soft);
+  border-color: transparent;
+  color: var(--brand);
+}
+
+.rule-summary {
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rule-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rule-summary-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rule-summary-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--divider);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.source-chip.is-rules {
+  background: var(--warning-bg);
+  border-color: transparent;
+  color: var(--warning);
+}
+
+/* --------------------------------------------------------------------------
+   10. Inventory toolbar and table
+   -------------------------------------------------------------------------- */
+.inventory-toolbar {
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-field {
+  flex: 1;
+  min-width: 220px;
+}
+
+.search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  font-size: 13px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3.5px var(--brand-ring);
+}
+
+/* The category box shares the search input's styling but not its stretch: the
+   search field is the one the eye goes to, so it keeps the spare width. */
+.category-field {
+  flex: 0 0 auto;
+  width: 178px;
+  min-width: 0;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--divider);
+  background: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition),
+    border-color var(--transition);
+  white-space: nowrap;
+}
+
+.filter-pill:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.filter-pill.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #FFFFFF;
+}
+
+.filter-pill:disabled {
+  opacity: 0.6;
+}
+
+.filter-pill.active:disabled {
+  opacity: 0.75;
+}
+
+/* Explains what the search does, because the answer is not obvious: Java
+   matches ID, name, category and supplier, but not batch IDs. */
+.toolbar-note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.inv-table-wrap {
+  border-radius: var(--radius-xl);
+  overflow-x: auto;
+  padding: 8px 12px;
+}
+
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 1080px;
+}
+
+.inv-table th {
+  text-align: left;
+  padding: 11px 13px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.inv-table td {
+  padding: 12px 13px;
+  border-bottom: 1px solid var(--divider);
+  vertical-align: middle;
+}
+
+.inv-table tbody tr {
+  transition: background var(--transition);
+}
+
+.inv-table tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.inv-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.inv-table .placeholder-row td {
+  padding: 26px 13px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Inventory cells.
+   The item name carries its ID and supplier underneath, because the table has
+   eleven columns already and the supplier is context rather than a figure. */
+.cell-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cell-meta {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.cell-muted {
+  color: var(--text-muted);
+}
+
+/* There is deliberately no "expired" cell style. A negative day count is a
+   number, not a verdict; colouring it would be this stylesheet deciding that
+   a negative value means expired. Java marks what it considers a reorder
+   risk, and that mark is the row chip below - which is why the chip is worded
+   for reorder risk alone. */
+
+/* The reorder chip under the type column. Its colour comes from the boolean
+   Java already decided (`stockoutRisk`), not from comparing numbers here. */
+.row-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.row-chip.is-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* "No reorder alert" - Java said this item is not below its reorder point.
+   That is the absence of one alert, not a statement of success, so the chip
+   is neutral: the same quiet surface the queue chips use, never the success
+   green, which this page reserves for things it can actually affirm. */
+.row-chip.is-neutral {
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--divider);
+  color: var(--text-secondary);
+}
+
+/* The "3 of 6" line. Sits directly under the toolbar note. */
+.inv-count-note {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   11. Settings
+   -------------------------------------------------------------------------- */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.settings-note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+}
+
+.input-clean {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  font-size: 13px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.input-clean:hover:not(:disabled) {
+  border-color: #94A3B8;
+}
+
+.input-clean:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3.5px var(--brand-ring);
+}
+
+.input-clean:disabled {
+  background: var(--glass-bg-subtle);
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   12. Drawer (item detail, right side)
+   -------------------------------------------------------------------------- */
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.28);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  width: min(520px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg-strong);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: -16px 0 40px -20px rgba(15, 23, 42, 0.22);
+}
+
+.drawer[hidden],
+.drawer-scrim[hidden] {
+  display: none;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.drawer-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.drawer-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A two-column key/value grid. Auto-fill keeps the labels from being squeezed
+   when a supplier name is long. */
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.fact-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fact-value {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-primary);
+  margin-top: 2px;
+  /* Long item names and supplier names wrap rather than widening the drawer. */
+  overflow-wrap: anywhere;
+}
+
+.fact-muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Java's own sentence about the stock, given the room to wrap. */
+.drawer-callout {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Java's working for the stock value, set in a monospace face so it reads as
+   arithmetic rather than as prose. */
+.drawer-formula {
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* The batch and sales tables. Narrower than the inventory table, so they
+   scroll horizontally inside the drawer rather than stretching it. */
+.drawer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.drawer-table th {
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.drawer-table td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+  color: var(--text-secondary);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.drawer-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* One of Java's formulas: a short label beside the working. */
+.formula-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.formula-row:last-child {
+  border-bottom: none;
+}
+
+.formula-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.formula-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The loading and failure note at the top of the drawer body. */
+.drawer-notice {
+  margin-bottom: 4px;
+}
+
+/* Sale controls inside the drawer. The form is two labelled fields stacked,
+   and the buttons sit under them. Nothing here conveys state by colour alone:
+   the message text always says what happened, and the tone only reinforces it. */
+.sale-form {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.sale-form .field-label {
+  margin-top: 6px;
+}
+
+.sale-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-quiet {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(248, 250, 252, 0.72);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color var(--transition), border-color var(--transition);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: #FFFFFF;
+  border-color: rgba(148, 163, 184, 0.55);
+}
+
+.btn-quiet:disabled {
+  opacity: 0.5;
+}
+
+/* The answer to a sale or undo, in Java's words. */
+.sale-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  min-height: 0;
+}
+
+.sale-note:empty {
+  margin-top: 0;
+}
+
+.sale-note.is-ok {
+  color: rgb(6, 95, 70);
+}
+
+.sale-note.is-warn {
+  color: rgb(146, 64, 14);
+}
+
+.sale-note.is-error {
+  color: rgb(159, 18, 57);
+}
+
+/* Delivery controls inside the drawer. Same shape as the sale block above it,
+   separated by a rule so the two forms never read as one. */
+#deliveryBlock {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--divider);
+}
+
+#deliveryBlock[hidden] {
+  display: none;
+}
+
+.action-subtitle {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The expiry guidance sits inside the stacked form, so it needs the same
+   top spacing the labels use rather than a field wrapper. */
+.sale-form .field-hint {
+  margin-top: 2px;
+}
+
+.sale-form .field-hint:empty {
+  display: none;
+}
+
+/* An inventory row that opens the drawer. It is a control, so it says so on
+   hover and keeps a visible focus ring for keyboard use. */
+.inv-table tbody tr.is-selectable {
+  cursor: pointer;
+}
+
+.inv-table tbody tr.is-selectable:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--row-hover);
+  color: var(--text-primary);
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   13. Modal (add / edit item)
+   -------------------------------------------------------------------------- */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(15, 23, 42, 0.32);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.modal-box {
+  position: fixed;
+  z-index: 71;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg-strong);
+  overflow: hidden;
+}
+
+.modal-box[hidden],
+.modal-scrim[hidden] {
+  display: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--divider);
+  flex-wrap: wrap;
+}
+
+.modal-note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.btn-brand-solid {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  background: var(--brand);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px -4px rgba(225, 29, 72, 0.32);
+  transition: background-color var(--transition), transform var(--transition),
+    box-shadow var(--transition);
+}
+
+.btn-brand-solid:hover:not(:disabled) {
+  background: var(--brand-hover);
+  transform: translateY(-1px);
+}
+
+.btn-brand-solid:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   14. Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width: 1120px) {
+  .dashboard-bento-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Below this width the sidebar becomes an off-canvas panel. The menu button
+   in the top bar toggles `sidebar-open` on .app-shell. */
+@media (max-width: 840px) {
+  .app-shell {
+    padding: 12px;
+    gap: 0;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  /* Opened by the button, this is a plain block above the main column. It is
+     not a fixed overlay: the shell is a flex row, so the panel simply appears
+     in the flow and the page grows to fit it. */
+  .app-shell.sidebar-open .sidebar {
+    display: flex;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-heading h1 {
+    font-size: 20px;
+  }
+
+  /* The date pill drops onto its own row rather than pushing the page wider
+     than the screen. */
+  .top-bar {
+    gap: 10px;
+  }
+
+  .utility-controls {
+    width: 100%;
+  }
+
+  .util-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+
+  .modal-box {
+    max-height: calc(100vh - 24px);
+  }
+}
+
+/* On a phone held upright, two KPI columns would squeeze the figures. */
+@media (max-width: 560px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Respect a user who has asked the system to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

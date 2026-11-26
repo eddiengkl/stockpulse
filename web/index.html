@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockPulse — Inventory &amp; Reorder Advisor</title>
+
+  <!--
+    StockPulse frontend shell.
+
+    Phase 4 step 1: layout and visual style only.
+
+    Phase 4 step 2: four scripts at the foot of the page connect startup to
+    GET /api/bootstrap, drive the demo role picker (which sends X-Demo-Role on
+    every request) and show the effective date that Java formatted.
+
+    Phase 4 step 3: the Dashboard is live - the six KPI cards, the two warning
+    queues and the advisor card are filled from GET /api/dashboard and
+    GET /api/advisor/briefing.
+
+    Phase 4 step 4: the Inventory table and its filters are live. Search,
+    category and status are sent to GET /api/items and answered by Java; the
+    page draws the rows in the order they arrive and filters nothing itself.
+
+    Phase 4 step 5: the item detail drawer is live. Selecting a row requests
+    GET /api/items/{id} and shows the batches, recent sales and the working
+    behind each figure exactly as Java supplies them.
+
+    Still inert, and deliberately so: every stock action, the activity log,
+    the settings form and the Add Item button. The drawer is read-only: it
+    has no fields and no buttons that change stock.
+
+    No figure on this page is ever computed here. Every one arrives from Java
+    as a finished value, and the page's job is to put it where it belongs.
+
+    No external dependencies: no CDN stylesheet, no webfont download. Styles
+    live in css/app.css, behaviour in js/, and the font stack is the system
+    one, so the page renders correctly with no network connection.
+  -->
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="light">
+  <div class="ambient-canvas" aria-hidden="true"></div>
+
+  <div class="app-shell" id="appShell">
+
+    <!-- =====================================================================
+         LEFT SIDEBAR
+         The Add Item button stays disabled for both roles until the add-item
+         form is built: a button with no handler that looks live is a lie. The
+         role block below is live — choosing a role sends X-Demo-Role and
+         reloads bootstrap.
+         ===================================================================== -->
+    <aside class="sidebar" id="sidebar">
+
+      <div class="logo-panel glass">
+        <div class="logo-mark-box" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="sidebar-brand-text">
+          <div class="logo-wordmark">
+            <span class="logo-wordmark-bold">ST</span><span class="logo-pulse-dot" aria-hidden="true"></span><span class="logo-wordmark-bold">CK</span><span class="logo-wordmark-light">PULSE</span>
+          </div>
+          <div class="logo-tagline">Inventory Advisor</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav-card glass" aria-label="Main">
+
+        <button type="button" class="add-item-pill-btn" id="addItemBtn" disabled
+                title="Available in a later step">
+          <span aria-hidden="true">+</span>
+          <span>Add Item</span>
+        </button>
+
+        <div class="nav-list">
+          <button type="button" class="nav-btn active" data-view="dashboard" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+
+          <button type="button" class="nav-btn" data-view="inventory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span>Inventory</span>
+          </button>
+
+          <button type="button" class="nav-btn" data-view="activity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Activity</span>
+          </button>
+
+          <div class="nav-divider" aria-hidden="true"></div>
+
+          <button type="button" class="nav-btn" data-view="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </div>
+
+        <!--
+          The role picker replaces the mockup's profile card. It is a demo
+          device, not a login: it sends X-Demo-Role and nothing else. The note
+          stays visible so the page never implies authentication, and app.js
+          replaces its text with the server's own sentence once bootstrap
+          answers. The buttons are enabled by script, so a page whose script
+          failed stays visibly inert.
+        -->
+        <div class="role-block">
+          <div class="role-block-label">
+            <span>Viewing as</span>
+          </div>
+          <div class="role-switch" role="group" aria-label="Demo role">
+            <button type="button" class="role-option active" data-role="Manager" disabled>Manager</button>
+            <button type="button" class="role-option" data-role="Staff" disabled>Staff</button>
+          </div>
+          <p class="role-note">
+            A demo switch, not a login. The role is enforced in Java, but anyone could claim any role.
+          </p>
+        </div>
+
+      </nav>
+    </aside>
+
+    <!-- =====================================================================
+         MAIN WORKSPACE
+         ===================================================================== -->
+    <main class="main-area">
+
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button type="button" class="mobile-menu-btn glass" id="mobileMenuBtn"
+                  aria-label="Open menu" aria-controls="sidebar" disabled>
+            <span aria-hidden="true">☰</span>
+          </button>
+          <div class="page-heading">
+            <h1 id="viewTitle">Dashboard</h1>
+            <p id="viewSubtitle">What needs attention today, across all tracked items.</p>
+          </div>
+        </div>
+
+        <div class="utility-controls">
+          <div class="util-pill glass">
+            <span class="util-label">Figures for</span>
+            <span class="util-value" id="todayText">—</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ===================================================================
+           KPI STRIP
+           Six cards, each showing one figure the API already returns. Every
+           value is a placeholder here; the page never derives one.
+           =================================================================== -->
+      <section class="kpi-row" aria-label="Key figures">
+
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Items tracked</div>
+            <div class="kpi-sub">In the catalogue</div>
+            <div class="kpi-value" data-figure="itemCount">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Stock value at cost</div>
+            <div class="kpi-sub">What is on the shelf</div>
+            <div class="kpi-value" data-figure="stockValueAtCost">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Below reorder point</div>
+            <div class="kpi-sub">Needs restocking</div>
+            <div class="kpi-value" data-figure="stockoutCount">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Expiring soon</div>
+            <div class="kpi-sub">Batches at risk before sale</div>
+            <div class="kpi-value" data-figure="expiryCount">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Count of batches already past their date. Separate from the
+             Expiry Watch card, which lists the individual warnings. -->
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Expired batches</div>
+            <div class="kpi-sub">Already past their date</div>
+            <div class="kpi-value" data-figure="expiredCount">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-body">
+            <div class="kpi-label">Waste cost</div>
+            <div class="kpi-sub" data-figure="wasteWindow">In the current window</div>
+            <div class="kpi-value" data-figure="wasteValueInWindow">—</div>
+          </div>
+          <div class="kpi-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+            </svg>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ===================================================================
+           VIEW 1 — DASHBOARD
+           =================================================================== -->
+      <section class="view-section active" id="view-dashboard">
+
+        <div class="dashboard-bento-top">
+
+          <!-- Priority restock queue: flags[] where type is STOCKOUT, in the
+               order Java ranked them. -->
+          <div class="dash-card glass">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-icon-pill" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="card-title">Priority Restock Queue</div>
+                  <div class="card-subtitle">Ranked by the Java risk engine — most urgent first</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-list" id="restockQueue">
+              <p class="empty-note">Restock warnings will appear here once the page is connected.</p>
+            </div>
+          </div>
+
+          <!-- Expiry watch: flags[] of type EXPIRY and EXPIRED. -->
+          <div class="dash-card glass">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-icon-pill" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="card-title">Expiry Watch</div>
+                  <div class="card-subtitle">Batches at risk of expiring before they sell</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-list" id="expiryQueue">
+              <p class="empty-note">Expiry warnings will appear here once the page is connected.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Advisor briefing.
+             Labelled twice on purpose: the AI text and the Java rule summary
+             are separate sources and must never look like one another. -->
+        <div class="dash-card glass">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon-pill" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z"/>
+                  <line x1="9" y1="22" x2="15" y2="22"/>
+                </svg>
+              </div>
+              <div>
+                <div class="card-title">Advisor Briefing</div>
+                <div class="card-subtitle">A written summary of the figures below — it adds no numbers of its own</div>
+              </div>
+            </div>
+            <span class="source-chip" id="advisorSourceChip">Not yet requested</span>
+          </div>
+
+          <div class="briefing-body">
+            <p class="briefing-text" id="advisorText">
+              The briefing has not been requested yet. When it is, this area shows either the
+              AI-written summary or a plain explanation of why one was not available.
+            </p>
+          </div>
+
+          <div class="rule-summary">
+            <div class="rule-summary-head">
+              <span class="rule-summary-title">Rule summary</span>
+              <span class="source-chip is-rules">Written by StockPulse — not AI</span>
+            </div>
+            <p class="rule-summary-text" id="ruleSummaryText">
+              The figures here are computed by StockPulse's own rules and will always be shown,
+              even when the AI summary is unavailable.
+            </p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ===================================================================
+           VIEW 2 — INVENTORY
+           =================================================================== -->
+      <section class="view-section" id="view-inventory">
+
+        <div class="inventory-toolbar glass">
+          <div class="search-field">
+            <label class="visually-hidden" for="invSearch">Search items</label>
+            <input type="text" id="invSearch" class="search-input"
+                   placeholder="Search item ID, name, category or supplier…"
+                   autocomplete="off" />
+          </div>
+          <!-- A text field rather than a list of categories: the API exposes no
+               category list, so any list drawn here would be assembled by the
+               page. The typed text is sent as ?category= and Java matches it
+               exactly, which keeps the server the only judge of what exists. -->
+          <div class="search-field category-field">
+            <label class="visually-hidden" for="invCategory">Filter by category</label>
+            <input type="text" id="invCategory" class="search-input"
+                   placeholder="Category (exact)…"
+                   autocomplete="off" />
+          </div>
+          <div class="filter-pills" id="invStatusFilters" aria-label="Filter by status">
+            <button type="button" class="filter-pill active" data-status="all">All status</button>
+            <button type="button" class="filter-pill" data-status="stockout">Below reorder point</button>
+            <button type="button" class="filter-pill" data-status="expiry">Expiry risk</button>
+            <button type="button" class="filter-pill" data-status="expired">Expired</button>
+          </div>
+        </div>
+
+        <p class="toolbar-note">
+          Search runs in Java: it matches item ID, name, category and supplier. It does not search
+          batch IDs — open an item to see its batches.
+        </p>
+
+        <p class="toolbar-note">
+          Expiry is how many days the oldest batch has left, as the server counts them: a negative
+          number means that date has already passed, and “No expiry” marks an item that cannot expire.
+        </p>
+
+        <p class="toolbar-note inv-count-note" id="invCountNote" aria-live="polite"></p>
+
+        <div class="inv-table-wrap glass">
+          <table class="inv-table">
+            <caption class="visually-hidden">
+              Tracked items, in the order the server returns them.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Category</th>
+                <th scope="col">Type</th>
+                <th scope="col">Stock</th>
+                <th scope="col">Cover</th>
+                <th scope="col">Reorder at</th>
+                <th scope="col">Order qty</th>
+                <th scope="col" class="th-expiry">
+                  Expiry (<abbr title="days until expiry. A negative number means the date has passed.">d</abbr>)
+                </th>
+                <th scope="col">Discount</th>
+                <th scope="col">Value at cost</th>
+                <th scope="col">Value at price</th>
+              </tr>
+            </thead>
+            <tbody id="invTableBody">
+              <tr class="placeholder-row">
+                <td colspan="11">Loading items from the server…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+      <!-- ===================================================================
+           VIEW 3 — ACTIVITY
+           Rendered exactly as the server returns it. No search, no filter
+           pills: the route accepts no filter parameter, so offering one would
+           be a control that does nothing.
+           =================================================================== -->
+      <section class="view-section" id="view-activity">
+
+        <div class="inventory-toolbar glass">
+          <div class="card-title-group">
+            <div class="card-icon-pill" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div>
+              <div class="card-title">Change History</div>
+              <div class="card-subtitle">Every recorded action, newest first, as the server returns it</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-card glass">
+          <div class="card-list" id="activityList">
+            <p class="empty-note">Recorded actions will appear here once the page is connected.</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ===================================================================
+           VIEW 4 — SETTINGS (Manager only)
+           =================================================================== -->
+      <section class="view-section" id="view-settings">
+
+        <div class="dash-card glass">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Settings</div>
+              <div class="card-subtitle">Manager only. Changing these changes how every figure is computed.</div>
+            </div>
+          </div>
+
+          <div class="settings-grid">
+
+            <div class="field">
+              <label class="field-label" for="setWindow">Sales window (days)</label>
+              <input class="input-clean" type="number" id="setWindow" disabled value="" placeholder="14" />
+              <p class="field-hint">Days of sales averaged to estimate how fast an item sells.</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="setMargin">Safety margin (days)</label>
+              <input class="input-clean" type="number" id="setMargin" disabled value="" placeholder="2" />
+              <p class="field-hint">Extra days of cover kept in hand on top of the supplier lead time.</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="setHorizon">Reorder horizon (days)</label>
+              <input class="input-clean" type="number" id="setHorizon" disabled value="" placeholder="7" />
+              <p class="field-hint">How far ahead a reorder is meant to last.</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="setSeason">Active season</label>
+              <select class="input-clean" id="setSeason" disabled>
+                <option>Loaded from the server</option>
+              </select>
+              <p class="field-hint">Which season's multipliers apply to the figures right now.</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="setDemoDate">Demo date</label>
+              <input class="input-clean" type="text" id="setDemoDate" disabled value="" placeholder="dd/MM/yyyy" />
+              <p class="field-hint">Session only. It is never saved, so tomorrow's real figures are not affected.</p>
+            </div>
+
+          </div>
+
+          <p class="settings-note">
+            Season month ranges are edited per season. Saving changes is wired up in a later step.
+          </p>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- =======================================================================
+       ITEM DRAWER (right side)
+       Opened by selecting an inventory row, filled by js/drawer.js from
+       GET /api/items/{id}. Read-only: no stock action lives here.
+       ======================================================================= -->
+  <div class="drawer-scrim" id="drawerScrim" hidden></div>
+
+  <aside class="drawer" id="itemDrawer" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-head">
+      <div>
+        <h2 class="drawer-title" id="drawerTitle">Item detail</h2>
+        <p class="drawer-subtitle" id="drawerSubtitle">Batches, recent sales and the working behind each figure.</p>
+      </div>
+      <button type="button" class="icon-btn" id="drawerClose" aria-label="Close item detail">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <h3 class="drawer-section-title">Item</h3>
+        <div class="fact-grid" id="drawerFacts"></div>
+      </div>
+      <div class="drawer-section">
+        <h3 class="drawer-section-title">Stock</h3>
+        <div id="drawerStock"></div>
+      </div>
+      <div class="drawer-section">
+        <h3 class="drawer-section-title">Batches</h3>
+        <div id="drawerBatches">
+          <p class="empty-note">Batches will be listed here, in the order the server returns them.</p>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h3 class="drawer-section-title">Recent sales</h3>
+        <div id="drawerSales">
+          <p class="empty-note">Recent sales will be listed here.</p>
+        </div>
+      </div>
+      <div class="drawer-section" id="drawerActionsSection" hidden>
+        <h3 class="drawer-section-title" id="drawerActionsTitle">Stock actions</h3>
+        <div id="drawerActions">
+          <div class="sale-form" id="saleForm">
+            <label class="field-label" for="saleQty">Quantity sold</label>
+            <input class="input-clean" type="number" step="any" min="0" id="saleQty" placeholder="e.g. 2" />
+            <label class="field-label" for="salePrice">Unit price (RM), optional</label>
+            <input class="input-clean" type="number" step="0.01" min="0" id="salePrice"
+                   placeholder="leave blank to use the item's price" />
+          </div>
+          <div class="sale-actions">
+            <button type="button" class="btn-brand-solid" id="saleSubmit">Record sale</button>
+            <button type="button" class="btn-quiet" id="undoSaleBtn">Undo last sale</button>
+          </div>
+          <p class="sale-note" id="saleNote" role="status" aria-live="polite"></p>
+        </div>
+        <div id="deliveryBlock">
+          <h4 class="action-subtitle">Receive a delivery</h4>
+          <div class="sale-form" id="deliveryForm">
+            <label class="field-label" for="deliveryQty">Quantity received</label>
+            <input class="input-clean" type="number" step="any" min="0" id="deliveryQty" placeholder="e.g. 12" />
+            <label class="field-label" for="deliveryCost">Unit cost (RM)</label>
+            <input class="input-clean" type="number" step="0.01" min="0" id="deliveryCost" placeholder="e.g. 2.10" />
+            <label class="field-label" for="deliveryExpiry">Expiry date (dd/MM/yyyy)</label>
+            <input class="input-clean" type="text" id="deliveryExpiry" placeholder="dd/MM/yyyy" />
+            <p class="field-hint" id="deliveryExpiryHint"></p>
+          </div>
+          <div class="sale-actions">
+            <button type="button" class="btn-brand-solid" id="deliverySubmit">Receive delivery</button>
+          </div>
+          <p class="sale-note" id="deliveryNote" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h3 class="drawer-section-title">How the figures were worked out</h3>
+        <div id="drawerBreakdown">
+          <p class="empty-note">The calculations, written out by Java, will appear here.</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =======================================================================
+       ADD / EDIT ITEM MODAL (Manager only)
+       ======================================================================= -->
+  <div class="modal-scrim" id="itemModalScrim" hidden></div>
+
+  <div class="modal-box glass" id="itemModal" role="dialog" aria-modal="true"
+       aria-labelledby="itemModalTitle" hidden>
+    <div class="modal-head">
+      <h2 class="modal-title" id="itemModalTitle">Add item</h2>
+      <button type="button" class="icon-btn" id="itemModalClose" aria-label="Close" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-grid">
+
+        <div class="field is-wide">
+          <label class="field-label" for="fItemType">Item type</label>
+          <select class="input-clean" id="fItemType" disabled>
+            <option value="PERISHABLE">Perishable — tracked by batch and expiry</option>
+            <option value="LONG_LIFE">Long life — no expiry to track</option>
+          </select>
+          <p class="field-hint">Fixed once the item is added, because its records were made against this type.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fName">Name</label>
+          <input class="input-clean" type="text" id="fName" disabled placeholder="e.g. Fresh Milk" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fCategory">Category</label>
+          <input class="input-clean" type="text" id="fCategory" disabled placeholder="e.g. Dairy" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fUnit">Unit</label>
+          <input class="input-clean" type="text" id="fUnit" disabled placeholder="e.g. bottle" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fSellingPrice">Selling price (RM)</label>
+          <input class="input-clean" type="number" step="0.01" id="fSellingPrice" disabled placeholder="0.00" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fUnitCost">Unit cost (RM)</label>
+          <input class="input-clean" type="number" step="0.01" id="fUnitCost" disabled placeholder="0.00" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fShelfLife">Shelf life (days)</label>
+          <input class="input-clean" type="number" id="fShelfLife" disabled placeholder="e.g. 7" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fPackSize">Pack size</label>
+          <input class="input-clean" type="number" id="fPackSize" disabled placeholder="e.g. 12" />
+          <p class="field-hint">Reorders are rounded up to a whole number of packs.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fSupplier">Supplier</label>
+          <input class="input-clean" type="text" id="fSupplier" disabled placeholder="e.g. Local Dairy Co." />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fLeadTime">Lead time (days)</label>
+          <input class="input-clean" type="number" id="fLeadTime" disabled placeholder="e.g. 2" />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fSeason">Season (optional)</label>
+          <select class="input-clean" id="fSeason" disabled>
+            <option>None</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="fMultiplier">Seasonal multiplier</label>
+          <input class="input-clean" type="number" step="0.01" id="fMultiplier" disabled placeholder="1.00" />
+          <p class="field-hint">Only used when a season is chosen.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <p class="modal-note">
+        Every rule is checked in Java. If a value is refused, the reason it gives is shown here.
+      </p>
+      <button type="button" class="btn-brand-solid" id="itemModalSave" disabled>Save item</button>
+    </div>
+  </div>
+
+  <!--
+    Frontend scripts, plain scripts rather than modules, in dependency order:
+    the API client and the formatters define globals that the rest read.
+
+    Step 2 loads /api/bootstrap, drives the demo role picker and shows the
+    effective date. Step 3 adds /api/dashboard and /api/advisor/briefing, which
+    fill the six KPI cards, the two warning queues and the advisor card. The
+    inventory table, the activity log, the settings form and every action
+    button stay inert until their own steps.
+  -->
+  <script src="js/api.js"></script>
+  <script src="js/format.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/drawer.js"></script>
+  <script src="js/actions.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

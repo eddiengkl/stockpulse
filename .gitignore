@@ -1,0 +1,7 @@
+out/
+ai.properties
+*.zip
+*.class
+
+# WorkBuddy tool working files (session notes, caches) - not project content
+.workbuddy-ai/
