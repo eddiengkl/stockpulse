@@ -72,6 +72,7 @@
     wireMobileMenu();
     wireInventoryFilters();
     wireDrawer();
+    wireItemModal();
 
     state.subscribe(onStateChange);
 
@@ -157,6 +158,24 @@
     } else if (reason === 'deliveryFailed') {
       StockPulseActions.setDeliveryBusy(false);
       StockPulseActions.showDeliveryFailure(current.lastError);
+    } else if (reason === 'wasteBusy') {
+      StockPulseActions.setWasteBusy(true);
+    } else if (reason === 'wasteDone') {
+      StockPulseActions.setWasteBusy(false);
+      StockPulseActions.showWasteResult(current.wasteResult);
+    } else if (reason === 'wasteFailed') {
+      StockPulseActions.setWasteBusy(false);
+      StockPulseActions.showWasteFailure(current.lastError);
+    } else if (reason === 'addItemBusy') {
+      setItemSaving(true);
+    } else if (reason === 'addItemDone') {
+      setItemSaving(false);
+      onItemAdded(current.addItemResult);
+    } else if (reason === 'addItemFailed') {
+      setItemSaving(false);
+      // The modal stays open with what was typed still in it, so a wrong price
+      // can be corrected without re-entering the rest.
+      setItemNote(describeError(current.lastError, 'The item could not be added.'), 'error');
     }
   }
 
@@ -171,7 +190,7 @@
     renderRolePicker(data.role);
     renderRoleNote(data);
     setPickerBusy(false);
-    setAddItemUnavailable();
+    setAddItemAvailability();
     clearStatus();
 
     loadDashboard();
@@ -374,6 +393,23 @@
       delivery.addEventListener('click', submitDelivery);
     }
 
+    var waste = document.getElementById('wasteSubmit');
+    if (waste) {
+      waste.addEventListener('click', submitWaste);
+    }
+
+    var wasteBatch = document.getElementById('wasteBatch');
+    if (wasteBatch) {
+      wasteBatch.addEventListener('change', function () {
+        // The picker's hint follows the chosen batch. `state.detail` is the
+        // payload the drawer is currently bound to, so the figures in the hint
+        // are the ones Java sent for this item.
+        if (state.detail) {
+          StockPulseActions.updateWasteBatchHint(state.detail);
+        }
+      });
+    }
+
     var close = document.getElementById('drawerClose');
     if (close) {
       close.addEventListener('click', requestClose);
@@ -515,6 +551,56 @@
     });
   }
 
+  /**
+   * Sends the waste form to Java.
+   *
+   * The batch, quantity and reason are passed through as chosen and typed. This
+   * function does not check that the batch belongs to the item, that it has
+   * that much left, or that the reason is acceptable - Java does all three, and
+   * its refusal is shown as sent. The only local check is that a batch is
+   * chosen and the quantity box is not empty, since an empty box is not a
+   * number to send.
+   */
+  function submitWaste() {
+    var itemId = StockPulseActions.boundItemId();
+    if (!itemId) {
+      return;
+    }
+
+    var select = document.getElementById('wasteBatch');
+    var qtyField = document.getElementById('wasteQty');
+    var reasonField = document.getElementById('wasteReason');
+
+    var batchId = select ? select.value : '';
+    var qty = qtyField ? qtyField.value.trim() : '';
+    var reason = reasonField ? reasonField.value.trim() : '';
+
+    if (!batchId) {
+      StockPulseActions.showWasteFailure({
+        describe: function () { return 'Choose the batch the waste came from.'; }
+      });
+      return;
+    }
+
+    if (qty === '') {
+      StockPulseActions.showWasteFailure({
+        describe: function () { return 'Enter the quantity wasted.'; }
+      });
+      return;
+    }
+
+    state.recordWaste(itemId, batchId, qty, reason).then(function () {
+      if (qtyField) {
+        qtyField.value = '';
+      }
+      if (reasonField) {
+        reasonField.value = '';
+      }
+    }).catch(function () {
+      // Reported by the 'wasteFailed' event in `onStateChange`.
+    });
+  }
+
   function isDrawerOpen() {
     var drawer = document.getElementById('itemDrawer');
     return Boolean(drawer) && !drawer.hidden;
@@ -649,29 +735,296 @@
     return document.querySelectorAll('.role-option[data-role]');
   }
 
+  /* ------------------------------------------------------------- add item */
+
   /**
-   * The Add Item button stays disabled for both roles.
+   * The fields of the add-item form, in the names Java reads.
    *
-   * The add-item form is built in a later step. Until then the button has no
-   * click handler, so enabling it for a Manager would be a button that looks
-   * live and does nothing — the exact lie the shell's CSS warns against.
+   * Each entry maps a DOM id to its request field. The list is the whole
+   * contract of POST /api/items: `itemId`, `itemType`, `name`, `category`,
+   * `unit`, `sellingPrice`, `unitCost`, `shelfLifeDays`, `packSize`,
+   * `supplierName`, `leadTimeDays`, plus the optional `season` and
+   * `seasonalMultiplier`.
    *
-   * `canManage` is still read, because it is the reason the button will be
-   * enabled later; here it only chooses which honest explanation to show. A
-   * Manager is told the feature is coming, Staff is told it is not theirs.
+   * `required` here means "this box must not be empty before the request is
+   * sent", which is the same courtesy the sale and delivery forms make. It is
+   * not a validation rule: whether a value is acceptable is Java's call, and a
+   * numeric field that is present but wrong is still sent to be refused.
    */
-  function setAddItemUnavailable() {
+  var ADD_ITEM_FIELDS = [
+    { id: 'fItemId', field: 'itemId', numeric: false, required: true },
+    { id: 'fItemType', field: 'itemType', numeric: false, required: true },
+    { id: 'fName', field: 'name', numeric: false, required: true },
+    { id: 'fCategory', field: 'category', numeric: false, required: true },
+    { id: 'fUnit', field: 'unit', numeric: false, required: true },
+    { id: 'fSellingPrice', field: 'sellingPrice', numeric: true, required: true },
+    { id: 'fUnitCost', field: 'unitCost', numeric: true, required: true },
+    { id: 'fShelfLife', field: 'shelfLifeDays', numeric: true, required: true },
+    { id: 'fPackSize', field: 'packSize', numeric: true, required: true },
+    { id: 'fSupplier', field: 'supplierName', numeric: false, required: true },
+    { id: 'fLeadTime', field: 'leadTimeDays', numeric: true, required: true },
+    { id: 'fSeason', field: 'season', numeric: false, required: false },
+    { id: 'fMultiplier', field: 'seasonalMultiplier', numeric: true, required: false }
+  ];
+
+  /** Human names for the fields, used only when the browser catches a blank box. */
+  var FIELD_LABELS = {
+    itemId: 'an item id',
+    itemType: 'an item type',
+    name: 'a name',
+    category: 'a category',
+    unit: 'a unit',
+    sellingPrice: 'a selling price',
+    unitCost: 'a unit cost',
+    shelfLifeDays: 'a shelf life in days',
+    packSize: 'a pack size',
+    supplierName: 'a supplier',
+    leadTimeDays: 'a lead time in days'
+  };
+
+  function wireItemModal() {
+    var open = document.getElementById('addItemBtn');
+    if (open) {
+      open.addEventListener('click', openItemModal);
+    }
+
+    var close = document.getElementById('itemModalClose');
+    if (close) {
+      close.addEventListener('click', closeItemModal);
+    }
+
+    var scrim = document.getElementById('itemModalScrim');
+    if (scrim) {
+      scrim.addEventListener('click', closeItemModal);
+    }
+
+    var save = document.getElementById('itemModalSave');
+    if (save) {
+      save.addEventListener('click', submitItem);
+    }
+
+    // The season picker only matters when a season is chosen, so the
+    // multiplier is disabled while "None" is selected. Java still validates
+    // both, and still accepts a blank season.
+    var season = document.getElementById('fSeason');
+    if (season) {
+      season.addEventListener('change', syncSeasonFields);
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if ((event.key === 'Escape' || event.key === 'Esc') && isItemModalOpen()) {
+        closeItemModal();
+      }
+    });
+  }
+
+  function isItemModalOpen() {
+    var modal = document.getElementById('itemModal');
+    return Boolean(modal) && !modal.hidden;
+  }
+
+  /** Clears every field of the add form back to its placeholder state. */
+  function resetItemForm() {
+    for (var i = 0; i < ADD_ITEM_FIELDS.length; i++) {
+      var field = document.getElementById(ADD_ITEM_FIELDS[i].id);
+      if (!field) {
+        continue;
+      }
+      if (field.tagName === 'SELECT') {
+        field.selectedIndex = 0;
+      } else {
+        field.value = '';
+      }
+    }
+    // A new item is perishable until told otherwise, which is the common case
+    // in this catalogue and the type whose form asks for a shelf life.
+    var type = document.getElementById('fItemType');
+    if (type) {
+      type.value = 'PERISHABLE';
+    }
+    setItemNote('Every rule is checked in Java. If a value is refused, the reason it gives is shown here.', '');
+    syncSeasonFields();
+  }
+
+  /** Fills the season picker from Java's bootstrap list. */
+  function fillSeasonOptions() {
+    var select = document.getElementById('fSeason');
+    if (!select || !state.bootstrap) {
+      return;
+    }
+    var seasons = state.bootstrap.seasons || [];
+    select.innerHTML = '';
+    var none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'None';
+    select.appendChild(none);
+    for (var i = 0; i < seasons.length; i++) {
+      var option = document.createElement('option');
+      option.value = seasons[i].name;
+      option.textContent = seasons[i].name + ' (' + seasons[i].monthRange + ')';
+      select.appendChild(option);
+    }
+    select.selectedIndex = 0;
+  }
+
+  /** Disables the multiplier until a season is chosen. */
+  function syncSeasonFields() {
+    var season = document.getElementById('fSeason');
+    var multiplier = document.getElementById('fMultiplier');
+    if (!season || !multiplier) {
+      return;
+    }
+    var hasSeason = season.value !== '';
+    multiplier.disabled = !hasSeason;
+    if (!hasSeason) {
+      multiplier.value = '';
+    }
+  }
+
+  /** Shows a message in the modal footer. `tone` is '', 'ok' or 'error'. */
+  function setItemNote(text, tone) {
+    var note = document.getElementById('itemModalNote');
+    if (!note) {
+      return;
+    }
+    note.textContent = text || '';
+    note.className = 'modal-note' + (tone ? ' is-' + tone : '');
+  }
+
+  function openItemModal() {
+    // A disabled control cannot fire this, but guard anyway: the modal is a
+    // Manager tool and must not open for a role Java said cannot manage.
+    if (!state.canManage() || state.writesBlocked()) {
+      return;
+    }
+    var modal = document.getElementById('itemModal');
+    var scrim = document.getElementById('itemModalScrim');
+    if (!modal) {
+      return;
+    }
+    resetItemForm();
+    fillSeasonOptions();
+    modal.hidden = false;
+    if (scrim) {
+      scrim.hidden = false;
+    }
+    var first = document.getElementById('fItemId');
+    if (first) {
+      first.focus();
+    }
+  }
+
+  function closeItemModal() {
+    var modal = document.getElementById('itemModal');
+    var scrim = document.getElementById('itemModalScrim');
+    if (modal) {
+      modal.hidden = true;
+    }
+    if (scrim) {
+      scrim.hidden = true;
+    }
+    var open = document.getElementById('addItemBtn');
+    if (open) {
+      open.focus();
+    }
+  }
+
+  /**
+   * Sends the add-item form to Java.
+   *
+   * The only checks made here are that a required box is not empty. Every
+   * rule - is the id free, is the price non-negative, is the pack size at
+   * least 1, does the season exist - is Java's, and its refusal is shown in
+   * the footer exactly as it was worded.
+   */
+  function submitItem() {
+    if (!state.canManage() || state.writesBlocked()) {
+      return;
+    }
+
+    var fields = {};
+    for (var i = 0; i < ADD_ITEM_FIELDS.length; i++) {
+      var spec = ADD_ITEM_FIELDS[i];
+      var element = document.getElementById(spec.id);
+      var value = element ? element.value.trim() : '';
+
+      if (value === '') {
+        if (spec.required) {
+          setItemNote('Enter ' + (FIELD_LABELS[spec.field] || spec.field) + '.', 'error');
+          if (element) {
+            element.focus();
+          }
+          return;
+        }
+        // A blank optional field is simply not sent, so Java falls back to its
+        // own default instead of receiving an empty string.
+        continue;
+      }
+
+      fields[spec.field] = value;
+    }
+
+    // The multiplier is only meaningful with a season; sending a leftover
+    // number with no season would be a value Java never asked for.
+    if (!fields.season) {
+      delete fields.seasonalMultiplier;
+    }
+
+    state.addItem(fields).catch(function () {
+      // Reported by the 'addItemFailed' event in `onStateChange`.
+    });
+  }
+
+  /** Disables the save and close controls while the request is in flight. */
+  function setItemSaving(saving) {
+    var save = document.getElementById('itemModalSave');
+    var close = document.getElementById('itemModalClose');
+    if (save) {
+      save.disabled = saving;
+      save.textContent = saving ? 'Saving…' : 'Save item';
+    }
+    if (close) {
+      close.disabled = saving;
+    }
+  }
+
+  /**
+   * Closes the modal and says what Java added.
+   *
+   * The list and dashboard refresh is started by the state layer, best effort:
+   * the item is already saved by the time this runs, so a slow or failed refresh
+   * must not turn a successful add into a reported failure. The message is
+   * Java's own sentence, naming the item and its new id.
+   */
+  function onItemAdded(result) {
+    closeItemModal();
+    if (result && result.message) {
+      setStatus(Format.text(result.message));
+    }
+  }
+
+  /**
+   * The Add Item button: Manager only, and never while saving is blocked.
+   *
+   * `canManage` comes from the bootstrap Java answered for the current role, so
+   * the button follows the server's view rather than the picker's. Staff see it
+   * disabled with an explanation instead of a control that can only be refused;
+   * Java still enforces the rule if this is ever wrong.
+   */
+  function setAddItemAvailability() {
     var button = document.getElementById('addItemBtn');
     if (!button) {
       return;
     }
-    button.disabled = true;
     if (state.writesBlocked()) {
+      button.disabled = true;
       button.title = 'Saving is blocked until the data files are recovered';
     } else if (state.canManage()) {
-      button.title = 'Available in a later step';
+      button.disabled = false;
+      button.title = 'Add a new item to the catalogue';
     } else {
-      button.title = 'Manager only \u2014 available in a later step';
+      button.disabled = true;
+      button.title = 'Manager only';
     }
   }
 

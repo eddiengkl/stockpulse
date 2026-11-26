@@ -1423,14 +1423,24 @@ select:disabled {
 
 /* Delivery controls inside the drawer. Same shape as the sale block above it,
    separated by a rule so the two forms never read as one. */
-#deliveryBlock {
+#deliveryBlock,
+#wasteBlock {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--divider);
 }
 
-#deliveryBlock[hidden] {
+#deliveryBlock[hidden],
+#wasteBlock[hidden] {
   display: none;
+}
+
+/* The batch picker is a select, so it needs the input's box and the browser's
+   own arrow kept visible. */
+select.input-clean {
+  appearance: auto;
+  padding-right: 8px;
+  cursor: pointer;
 }
 
 .action-subtitle {
@@ -1559,6 +1569,16 @@ select:disabled {
   line-height: 1.5;
   color: var(--text-muted);
   max-width: 46ch;
+}
+
+/* The footer note also carries Java's refusal for a rejected item. The text
+   always says what happened; the tone only reinforces it. */
+.modal-note.is-error {
+  color: rgb(159, 18, 57);
+}
+
+.modal-note.is-ok {
+  color: rgb(6, 95, 70);
 }
 
 .btn-brand-solid {

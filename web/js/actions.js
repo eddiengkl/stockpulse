@@ -75,8 +75,10 @@
     if (!keepMessage) {
       setMessage('', '');
       setDeliveryMessage('', '');
+      setWasteMessage('', '');
     }
     bindDeliveryForm(item);
+    bindWasteForm(item);
   }
 
   /**
@@ -203,6 +205,132 @@
     }
   }
 
+  /* ----------------------------------------------------------------- waste */
+
+  /**
+   * Fills the waste form's batch picker from Java's batch list.
+   *
+   * The options are the batches the item payload already carries, in Java's
+   * order. Each one shows the remaining quantity and the batch state as Java
+   * reported it, so a depleted batch is visible as depleted before anyone
+   * picks it - but it is still selectable, because the decision that it cannot
+   * be wasted belongs to Java, not to this list.
+   */
+  function bindWasteForm(item) {
+    var block = el('wasteBlock');
+    var select = el('wasteBatch');
+    var hint = el('wasteBatchHint');
+    var qty = el('wasteQty');
+    var reason = el('wasteReason');
+
+    if (!block || !select) {
+      return;
+    }
+
+    var batches = item.batches || [];
+    block.hidden = batches.length === 0;
+    if (qty) {
+      qty.value = '';
+      qty.placeholder = item.unit ? 'in ' + item.unit : 'e.g. 2';
+    }
+    if (reason) {
+      reason.value = '';
+    }
+
+    select.innerHTML = '';
+    for (var i = 0; i < batches.length; i++) {
+      var b = batches[i];
+      var option = document.createElement('option');
+      option.value = b.batchId;
+      // "Remaining" avoids pluralising the unit here: Java owns that wording
+      // (`describeQuantity`), and a bare "8 pack" would be wrong.
+      option.textContent = b.batchId + ' · remaining ' + Format.count(b.qtyRemaining)
+        + (b.unit ? ' ' + b.unit : '');
+      select.appendChild(option);
+    }
+    select.selectedIndex = 0;
+
+    if (hint) {
+      hint.textContent = batches.length === 0
+        ? 'This item has no batches, so there is nothing to write off.'
+        : 'Java decides whether the quantity fits the batch.';
+    }
+
+    updateWasteBatchHint(item);
+  }
+
+  /**
+   * Says what the chosen batch has left, in Java's own figure.
+   *
+   * This is a label, not a limit: the quantity field is never capped and Java
+   * still refuses an over-large write-off. Whether a batch counts as used up
+   * is Java's `depleted` flag, not a comparison made here.
+   */
+  function updateWasteBatchHint(item) {
+    var select = el('wasteBatch');
+    var hint = el('wasteBatchHint');
+    if (!select || !hint) {
+      return;
+    }
+    var batches = item.batches || [];
+    var chosen = null;
+    for (var i = 0; i < batches.length; i++) {
+      if (batches[i].batchId === select.value) {
+        chosen = batches[i];
+        break;
+      }
+    }
+    if (!chosen) {
+      hint.textContent = 'Java decides whether the quantity fits the batch.';
+      return;
+    }
+    if (chosen.depleted) {
+      hint.textContent = 'This batch is used up. Java will refuse a write-off from it.';
+      return;
+    }
+    hint.textContent = chosen.batchId + ' remaining: '
+      + Format.count(chosen.qtyRemaining) + (chosen.unit ? ' ' + chosen.unit : '')
+      + '. Java decides whether the quantity fits.';
+  }
+
+  /** Shows a message under the waste button. */
+  function setWasteMessage(text, tone) {
+    var note = el('wasteNote');
+    if (!note) {
+      return;
+    }
+    note.textContent = text || '';
+    note.className = 'sale-note' + (tone ? ' is-' + tone : '');
+  }
+
+  /**
+   * Prints Java's answer to a waste record.
+   *
+   * `message` already names the quantity, the item and the value lost, so it is
+   * shown exactly as written. The record, the remaining stock and the new risk
+   * all arrive in the payload; none of them is computed here.
+   */
+  function showWasteResult(result) {
+    if (!result) {
+      return;
+    }
+    setWasteMessage(Format.text(result.message), 'ok');
+  }
+
+  /** Prints the server's reason for refusing a write-off, as it wrote it. */
+  function showWasteFailure(error) {
+    var text = (error && error.describe) ? error.describe() : 'The write-off could not be recorded.';
+    setWasteMessage(text, 'error');
+  }
+
+  /** Disables the waste button while its request is in flight. */
+  function setWasteBusy(busy) {
+    var submit = el('wasteSubmit');
+    if (submit) {
+      submit.disabled = busy;
+    }
+  }
+
   /** Clears the panel, used when the drawer has no item to act on. */
   function reset() {
     var section = el('drawerActionsSection');
@@ -212,6 +340,7 @@
     }
     setMessage('', '');
     setDeliveryMessage('', '');
+    setWasteMessage('', '');
   }
 
   global.StockPulseActions = {
@@ -224,6 +353,10 @@
     showDeliveryResult: showDeliveryResult,
     showDeliveryFailure: showDeliveryFailure,
     setDeliveryBusy: setDeliveryBusy,
+    updateWasteBatchHint: updateWasteBatchHint,
+    showWasteResult: showWasteResult,
+    showWasteFailure: showWasteFailure,
+    setWasteBusy: setWasteBusy,
     reset: reset
   };
 }(window));

@@ -73,6 +73,18 @@
     /** The last delivery answer, as Java sent it. Null until one arrives. */
     this.deliveryResult = null;
 
+    /** True while a waste request is in flight. */
+    this.wasteBusy = false;
+
+    /** The last waste answer, as Java sent it. Null until one arrives. */
+    this.wasteResult = null;
+
+    /** True while an add-item request is in flight. */
+    this.addItemBusy = false;
+
+    /** The last add-item answer, as Java sent it. Null until one arrives. */
+    this.addItemResult = null;
+
     /**
      * True only while the refresh that follows a sale or undo is in flight.
      *
@@ -308,6 +320,7 @@
     this.saleResult = null;
     this.undoResult = null;
     this.deliveryResult = null;
+    this.wasteResult = null;
     this.keepSaleNote = false;
     this.emit('detailLoading');
 
@@ -434,6 +447,69 @@
       self.deliveryResult = null;
       self.lastError = error;
       self.emit('deliveryFailed');
+      throw error;
+    });
+  };
+
+  /**
+   * Records a write-off and refreshes what the page shows afterwards.
+   *
+   * The batch id, quantity and reason go to Java exactly as chosen and typed.
+   * Whether the batch belongs to this item, whether it has that much left, and
+   * what the loss is worth are all Java's decisions; this method only forwards
+   * the answer. The reason is never defaulted here - a blank field is sent as
+   * blank and Java answers "The field 'reason' is required."
+   */
+  State.prototype.recordWaste = function (itemId, batchId, qty, reason) {
+    var self = this;
+    this.wasteBusy = true;
+    this.wasteResult = null;
+    this.emit('wasteBusy');
+    return this.api.waste(itemId, { batchId: batchId, qty: qty, reason: reason }).then(function (result) {
+      self.wasteBusy = false;
+      self.wasteResult = result;
+      self.emit('wasteDone');
+      self.refreshAfterChange(itemId);
+      return result;
+    }, function (error) {
+      self.wasteBusy = false;
+      self.wasteResult = null;
+      self.lastError = error;
+      self.emit('wasteFailed');
+      throw error;
+    });
+  };
+
+  /**
+   * Adds an item to the catalogue and refreshes what the page shows after.
+   *
+   * Every field goes to Java exactly as typed - nothing is converted, rounded
+   * or defaulted here. Whether the id is free, whether the prices are sane,
+   * whether the pack size and lead time make sense and whether the season
+   * exists are all Java's decisions, and its refusal is shown as sent.
+   *
+   * The item is created with no stock; Java creates no batch either, so the new
+   * item reads as out of stock until a delivery is recorded for it.
+   */
+  State.prototype.addItem = function (fields) {
+    var self = this;
+    this.addItemBusy = true;
+    this.addItemResult = null;
+    this.emit('addItemBusy');
+    return this.api.addItem(fields).then(function (result) {
+      self.addItemBusy = false;
+      self.addItemResult = result;
+      self.emit('addItemDone');
+      // The catalogue grew, so the list and its totals are both stale. The
+      // briefing is not re-requested: the cached text is re-rendered.
+      self.loadItems().catch(function () {});
+      self.refreshDashboard();
+      return result;
+    }, function (error) {
+      self.addItemBusy = false;
+      self.addItemResult = null;
+      self.lastError = error;
+      self.emit('addItemFailed');
       throw error;
     });
   };
